@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   fetchDirectionsPolyline,
   getGoogleMapsApiKey,
-  parseGeoLocation,
   PRIORITY_COLORS,
   SHELTER_STATUS_COLORS,
 } from "@/lib/geo";
+import { coordsFromLocation, getGoogleMapsUrl } from "@/lib/navigation";
 import type {
   PublicEmergencyLocation,
   PublicEvacuationCenter,
@@ -23,6 +23,7 @@ type MapViewProps = {
   shelters: PublicEvacuationCenter[];
   routeDestination: { lat: number; lng: number; label: string } | null;
   onClearRoute: () => void;
+  heightClass?: string;
 };
 
 const DEFAULT_CENTER = { lat: 35.6812, lng: 139.7671 };
@@ -35,6 +36,7 @@ export function MapView({
   shelters,
   routeDestination,
   onClearRoute,
+  heightClass = "h-[45vh] min-h-[240px] sm:h-[50vh] md:min-h-[20rem]",
 }: MapViewProps) {
   const pinLat = pinPosition?.lat ?? null;
   const pinLng = pinPosition?.lng ?? null;
@@ -125,7 +127,6 @@ export function MapView({
     if (!mapReady || !mapRef.current || pinLat === null || pinLng === null) return;
 
     const position = { lat: pinLat, lng: pinLng };
-    mapRef.current.setCenter(position);
 
     if (!pinMarkerRef.current) {
       pinMarkerRef.current = new google.maps.Marker({
@@ -160,7 +161,7 @@ export function MapView({
     emergencyMarkersRef.current = [];
 
     emergencies.forEach((emergency) => {
-      const coords = parseGeoLocation(emergency.location);
+      const coords = coordsFromLocation(emergency.location);
       if (!coords) return;
 
       const marker = new google.maps.Marker({
@@ -179,11 +180,13 @@ export function MapView({
 
       marker.addListener("click", () => {
         if (!infoWindowRef.current || !mapRef.current) return;
+        const navUrl = getGoogleMapsUrl(emergency.location);
         infoWindowRef.current.setContent(`
-          <div style="font-family:sans-serif;max-width:220px;color:#0f172a">
+          <div style="font-family:sans-serif;max-width:240px;color:#0f172a">
             <strong>${escapeHtml(emergency.title)}</strong>
             <p style="font-size:12px;margin:4px 0">緊急度: ${emergency.priority}</p>
             ${emergency.description ? `<p style="font-size:12px">${escapeHtml(emergency.description)}</p>` : ""}
+            ${navUrl ? `<a href="${navUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;font-size:12px;color:#2563eb;text-decoration:underline">Googleマップで経路を表示</a>` : ""}
           </div>`);
         infoWindowRef.current.open({ map: mapRef.current, anchor: marker });
       });
@@ -199,7 +202,7 @@ export function MapView({
     shelterMarkersRef.current = [];
 
     shelters.forEach((shelter) => {
-      const coords = parseGeoLocation(shelter.location);
+      const coords = coordsFromLocation(shelter.location);
       if (!coords) return;
 
       const marker = new google.maps.Marker({
@@ -218,11 +221,13 @@ export function MapView({
 
       marker.addListener("click", () => {
         if (!infoWindowRef.current || !mapRef.current) return;
+        const navUrl = getGoogleMapsUrl(shelter.location);
         infoWindowRef.current.setContent(`
           <div style="font-family:sans-serif;max-width:220px;color:#0f172a">
             <strong>${escapeHtml(shelter.name)}</strong>
             <p style="font-size:12px;margin:4px 0">${escapeHtml(shelter.address ?? "")}</p>
             <a href="/evacuation-centers/${shelter.id}" style="font-size:12px;color:#2563eb">詳細を見る</a>
+            ${navUrl ? `<br /><a href="${navUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;font-size:12px;color:#2563eb;text-decoration:underline">Googleマップで経路を表示</a>` : ""}
           </div>`);
         infoWindowRef.current.open({ map: mapRef.current, anchor: marker });
       });
@@ -268,6 +273,41 @@ export function MapView({
     });
   }, [mapReady, pinLat, pinLng, routeLat, routeLng]);
 
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    if (routeLat !== null && routeLng !== null) return;
+
+    const bounds = new google.maps.LatLngBounds();
+    let markerCount = 0;
+
+    emergencies.forEach((emergency) => {
+      const coords = coordsFromLocation(emergency.location);
+      if (coords) {
+        bounds.extend(coords);
+        markerCount += 1;
+      }
+    });
+
+    shelters.forEach((shelter) => {
+      const coords = coordsFromLocation(shelter.location);
+      if (coords) {
+        bounds.extend(coords);
+        markerCount += 1;
+      }
+    });
+
+    if (pinLat !== null && pinLng !== null) {
+      bounds.extend({ lat: pinLat, lng: pinLng });
+    }
+
+    if (markerCount > 0) {
+      mapRef.current.fitBounds(bounds, 48);
+    } else if (pinLat !== null && pinLng !== null) {
+      mapRef.current.setCenter({ lat: pinLat, lng: pinLng });
+      mapRef.current.setZoom(14);
+    }
+  }, [emergencies, shelters, mapReady, pinLat, pinLng, routeLat, routeLng]);
+
   if (mapError) {
     return (
       <div className="flex h-72 items-center justify-center rounded-xl border-2 border-red-200 bg-red-50 p-6 text-center text-red-700">
@@ -285,21 +325,23 @@ export function MapView({
         </div>
       )}
       {routeDestination && (
-        <div className="absolute right-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-blue-900 shadow sm:right-3 sm:top-3 sm:px-3 sm:text-xs">
-          <Navigation className="mb-0.5 inline h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          経路: {routeDestination.label}
+        <div className="absolute inset-x-2 bottom-2 z-10 flex items-center justify-between gap-2 rounded-lg border-2 border-blue-500 bg-blue-600 px-3 py-2.5 text-sm font-bold text-white shadow-lg sm:inset-x-3">
+          <span className="flex min-w-0 items-center gap-1.5 truncate">
+            <Navigation className="h-4 w-4 shrink-0" aria-hidden />
+            経路: {routeDestination.label}
+          </span>
           <button
             type="button"
             onClick={onClearRoute}
-            className="ml-1 underline hover:no-underline"
+            className="shrink-0 rounded-md bg-white px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50"
           >
-            解除
+            経路を解除
           </button>
         </div>
       )}
       <div
         ref={containerRef}
-        className="h-[min(60vh,28rem)] min-h-[16rem] w-full rounded-xl border border-slate-300 shadow-sm sm:h-96 md:min-h-[20rem]"
+        className={`w-full rounded-xl border border-slate-300 shadow-sm ${heightClass}`}
         role="application"
         aria-label="防災地図"
       />

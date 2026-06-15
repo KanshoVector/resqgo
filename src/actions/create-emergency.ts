@@ -1,6 +1,7 @@
 "use server";
 
 import type { ActionResult } from "@/lib/result";
+import { filterSosEmergencies, isSosEmergencyTitle } from "@/lib/sos";
 import { emergencyInputSchema } from "@/lib/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -14,6 +15,14 @@ export async function createEmergency(
   }
 
   const { title, description, lat, lng, contact_info, priority } = parsed.data;
+
+  if (!isSosEmergencyTitle(title)) {
+    return {
+      ok: false,
+      error: "VALIDATION",
+      message: "避難所情報は救助要請として登録できません。避難所は専用マスターで管理されます。",
+    };
+  }
 
   try {
     const supabase = await createServerSupabaseClient();

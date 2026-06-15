@@ -6,13 +6,19 @@ import type {
   PublicEmergencyLocation,
   PublicEvacuationCenter,
 } from "@/lib/types/public";
-import { searchEmergency as searchEmergencyAction } from "@/actions/search-emergency";
+import {
+  fetchAllMapPins,
+  searchEmergency as searchEmergencyAction,
+} from "@/actions/search-emergency";
 import { searchEvacuationCenters } from "@/actions/evacuation-centers";
 import type { FilterState } from "@/components/FilterBar";
 
 type FeedState = {
   emergencies: PublicEmergencyLocation[];
   shelters: PublicEvacuationCenter[];
+  mapEmergencies: PublicEmergencyLocation[];
+  mapShelters: PublicEvacuationCenter[];
+  mapFallbackActive: boolean;
   loading: boolean;
   error: string | null;
 };
@@ -28,6 +34,9 @@ export function useEmergencyFeed(
   const [state, setState] = useState<FeedState>({
     emergencies: [],
     shelters: [],
+    mapEmergencies: [],
+    mapShelters: [],
+    mapFallbackActive: false,
     loading: false,
     error: null,
   });
@@ -35,7 +44,15 @@ export function useEmergencyFeed(
 
   const fetchFeed = useCallback(async () => {
     if (lat === null || lng === null || !isAuthenticated) {
-      setState({ emergencies: [], shelters: [], loading: false, error: null });
+      setState({
+        emergencies: [],
+        shelters: [],
+        mapEmergencies: [],
+        mapShelters: [],
+        mapFallbackActive: false,
+        loading: false,
+        error: null,
+      });
       return;
     }
 
@@ -63,15 +80,48 @@ export function useEmergencyFeed(
       setState({
         emergencies: [],
         shelters: [],
+        mapEmergencies: [],
+        mapShelters: [],
+        mapFallbackActive: false,
         loading: false,
         error: errMsg,
       });
       return;
     }
 
+    let emergencies = emResult.data;
+    let shelters = shResult.data;
+    let mapEmergencies = emergencies;
+    let mapShelters = shelters;
+    let mapFallbackActive = false;
+
+    if (emergencies.length + shelters.length === 0) {
+      const expandedInput = { ...searchInput, radiusMeters: 50000 };
+      const [emWide, shWide] = await Promise.all([
+        searchEmergencyAction(expandedInput),
+        searchEvacuationCenters(expandedInput),
+      ]);
+
+      if (emWide.ok && shWide.ok && emWide.data.length + shWide.data.length > 0) {
+        mapEmergencies = emWide.data;
+        mapShelters = shWide.data;
+        mapFallbackActive = true;
+      } else {
+        const allPins = await fetchAllMapPins();
+        if (allPins.ok && allPins.data.emergencies.length + allPins.data.shelters.length > 0) {
+          mapEmergencies = allPins.data.emergencies;
+          mapShelters = allPins.data.shelters;
+          mapFallbackActive = true;
+        }
+      }
+    }
+
     setState({
-      emergencies: emResult.data,
-      shelters: shResult.data,
+      emergencies,
+      shelters,
+      mapEmergencies,
+      mapShelters,
+      mapFallbackActive,
       loading: false,
       error: null,
     });

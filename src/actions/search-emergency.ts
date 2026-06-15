@@ -2,8 +2,12 @@
 
 import type { ActionResult } from "@/lib/result";
 import { searchSchema } from "@/lib/schemas";
+import { filterSosEmergencies } from "@/lib/sos";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import type { PublicEmergencyLocation } from "@/lib/types/public";
+import type {
+  PublicEmergencyLocation,
+  PublicEvacuationCenter,
+} from "@/lib/types/public";
 
 const PUBLIC_EMERGENCY_KEYS = [
   "id",
@@ -17,10 +21,9 @@ const PUBLIC_EMERGENCY_KEYS = [
 ] as const;
 
 function toPublicEmergency(row: Record<string, unknown>): PublicEmergencyLocation {
-  const picked = Object.fromEntries(
+  return Object.fromEntries(
     PUBLIC_EMERGENCY_KEYS.map((k) => [k, row[k]]),
   ) as PublicEmergencyLocation;
-  return picked;
 }
 
 export async function searchEmergency(
@@ -65,7 +68,7 @@ export async function searchEmergency(
     }
 
     const rows = (data ?? []) as Record<string, unknown>[];
-    return { ok: true, data: rows.map(toPublicEmergency) };
+    return { ok: true, data: filterSosEmergencies(rows.map(toPublicEmergency)) };
   } catch (err) {
     console.error("[searchEmergency] Unexpected error:", err);
     return {
@@ -76,4 +79,57 @@ export async function searchEmergency(
   }
 }
 
-export type { PublicEmergencyLocation };
+export async function fetchAllMapPins(): Promise<
+  ActionResult<{
+    emergencies: PublicEmergencyLocation[];
+    shelters: PublicEvacuationCenter[];
+  }>
+> {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        ok: false,
+        error: "VALIDATION",
+        message: "ログインが必要です。",
+      };
+    }
+
+    const { data, error } = await supabase.rpc("fetch_all_map_pins");
+
+    if (error || !data) {
+      console.error("[fetchAllMapPins] RPC failed:", error);
+      return {
+        ok: false,
+        error: "INTERNAL",
+        message: "地図データの取得に失敗しました。",
+      };
+    }
+
+    const payload = data as {
+      emergencies: Record<string, unknown>[];
+      shelters: Record<string, unknown>[];
+    };
+
+    return {
+      ok: true,
+      data: {
+        emergencies: filterSosEmergencies(
+          (payload.emergencies ?? []).map(toPublicEmergency),
+        ),
+        shelters: (payload.shelters ?? []) as PublicEvacuationCenter[],
+      },
+    };
+  } catch (err) {
+    console.error("[fetchAllMapPins] Unexpected error:", err);
+    return {
+      ok: false,
+      error: "INTERNAL",
+      message: "予期しないエラーが発生しました。",
+    };
+  }
+}

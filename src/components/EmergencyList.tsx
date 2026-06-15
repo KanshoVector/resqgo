@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { AlertCircle, MapPin, RefreshCw } from "lucide-react";
+import { NativeMapDirectionsLink } from "@/components/NativeMapDirectionsLink";
+import { coordsFromLocation } from "@/lib/navigation";
 import {
   haversineMeters,
-  parseGeoLocation,
   PRIORITY_COLORS,
   PRIORITY_LABELS,
   SHELTER_STATUS_COLORS,
@@ -102,18 +103,12 @@ export function EmergencyList({
           </h3>
           <ul className="space-y-2">
             {emergencies.map((item) => {
-              const coords = parseGeoLocation(item.location);
+              const coords = coordsFromLocation(item.location);
               const dist =
-                origin && coords
-                  ? haversineMeters(origin, coords)
-                  : null;
+                origin && coords ? haversineMeters(origin, coords) : null;
               return (
                 <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectEmergency(item)}
-                    className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-red-300 hover:shadow"
-                  >
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-center gap-2">
                       <span
                         className="rounded px-2 py-0.5 text-xs font-bold text-white"
@@ -133,7 +128,17 @@ export function EmergencyList({
                     {item.description && (
                       <p className="mt-1 text-sm text-slate-600">{item.description}</p>
                     )}
-                  </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onSelectEmergency(item)}
+                        className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                      >
+                        アプリ内で経路表示
+                      </button>
+                      <NativeMapDirectionsLink location={item.location} />
+                    </div>
+                  </div>
                 </li>
               );
             })}
@@ -148,11 +153,9 @@ export function EmergencyList({
           </h3>
           <ul className="space-y-2">
             {shelters.map((item) => {
-              const coords = parseGeoLocation(item.location);
+              const coords = coordsFromLocation(item.location);
               const dist =
-                origin && coords
-                  ? haversineMeters(origin, coords)
-                  : null;
+                origin && coords ? haversineMeters(origin, coords) : null;
               return (
                 <li key={item.id}>
                   <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -184,13 +187,14 @@ export function EmergencyList({
                       <button
                         type="button"
                         onClick={() => onSelectShelter(item)}
-                        className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                        className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
                       >
-                        地図で経路表示
+                        アプリ内で経路表示
                       </button>
+                      <NativeMapDirectionsLink location={item.location} />
                       <Link
                         href={`/evacuation-centers/${item.id}`}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
                         詳細を見る
                       </Link>

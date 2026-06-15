@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { ArrowLeft, Building2, MapPin, Navigation } from "lucide-react";
+import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getEvacuationCenter } from "@/actions/evacuation-centers";
-import {
-  parseGeoLocation,
-  SHELTER_STATUS_COLORS,
-  SHELTER_STATUS_LABELS,
-} from "@/lib/geo";
+import { NativeMapDirectionsLink } from "@/components/NativeMapDirectionsLink";
+import { buildInAppRouteHref } from "@/lib/navigation";
+import { SHELTER_STATUS_COLORS, SHELTER_STATUS_LABELS } from "@/lib/geo";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -21,14 +19,14 @@ export default async function EvacuationCenterPage({ params }: PageProps) {
   }
 
   const center = result.data;
-  const coords = parseGeoLocation(center.location);
+  const routeHref = buildInAppRouteHref(center.location, center.name);
 
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
           <Link
-            href="/"
+            href="/?tab=search"
             className="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-slate-900"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -76,19 +74,17 @@ export default async function EvacuationCenterPage({ params }: PageProps) {
             </div>
           </dl>
 
-          {coords && (
-            <p className="mb-6 text-sm text-slate-500">
-              座標: {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
-            </p>
-          )}
-
-          <Link
-            href={`/?route=${id}`}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500"
-          >
-            <Navigation className="h-4 w-4" />
-            地図で経路を表示
-          </Link>
+          <div className="flex flex-col gap-2">
+            {routeHref && (
+              <Link
+                href={routeHref}
+                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500"
+              >
+                アプリ内で経路を表示
+              </Link>
+            )}
+            <NativeMapDirectionsLink location={center.location} />
+          </div>
         </article>
       </main>
     </div>
