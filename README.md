@@ -1,7 +1,6 @@
 # ResQGo
 
-**本番 URL:** https://resqgo.vercel.app  
-（初回のみ [Vercel Import](https://vercel.com/new/import?s=https://github.com/KanshoVector/resqgo) でリポジトリ接続・環境変数設定・Deploy が必要。完了後この URL で公開される）
+**本番 URL:** https://resqgo.vercel.app/
 
 **リポジトリ:** https://github.com/KanshoVector/resqgo  
 **CI:** `main` push で TypeScript チェック + 本番ビルド（GitHub Actions）
