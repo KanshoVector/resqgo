@@ -1,10 +1,12 @@
 # ResQGo
 
-**本番 URL:** （Vercel デプロイ後に更新）
+**本番 URL:** https://resqgo.vercel.app  
+（初回のみ [Vercel Import](https://vercel.com/new/import?s=https://github.com/KanshoVector/resqgo) でリポジトリ接続・環境変数設定・Deploy が必要。完了後この URL で公開される）
+
+**リポジトリ:** https://github.com/KanshoVector/resqgo  
+**CI:** `main` push で TypeScript チェック + 本番ビルド（GitHub Actions）
 
 災害時に位置情報付きの救助要請（SOS）を投稿し、ログイン後に周辺の要請・避難所を地図上で検索・経路確認する Web アプリ。
-
----
 
 ## 何を解決するか
 
@@ -72,11 +74,11 @@ docker compose up --build
 
 ---
 
-## Vercel デプロイ
+## Vercel デプロイ（初回）
 
-1. GitHub リポジトリ `KanshoVector/resqgo` を Vercel にインポート
-2. Framework Preset: **Next.js**（デフォルト）
-3. Environment Variables に以下を設定（Production / Preview 両方推奨）:
+1. https://vercel.com/new/import?s=https://github.com/KanshoVector/resqgo を開く
+2. Framework: **Next.js**（自動検出）
+3. Environment Variables:
 
 | 変数 | 説明 |
 |------|------|
@@ -84,9 +86,10 @@ docker compose up --build
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public key |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Maps JavaScript API キー |
 
-4. `main` へ push すると自動デプロイ
+4. **Deploy** → 完了後 `https://resqgo.vercel.app`（または Vercel が割り当てた URL）で公開
+5. 以降 `main` への push で自動再デプロイ
 
-Google Maps キーは **Maps JavaScript API** と **Directions API** を有効にし、デプロイ先ドメインをキー制限に追加すること。
+Google Maps キーは **Maps JavaScript API** と **Directions API** を有効にし、Vercel の本番ドメインをキー制限に追加すること。
 
 ---
 
