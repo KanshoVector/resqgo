@@ -1,17 +1,39 @@
-name: Supabase Keep Alive
+name: Supabase Keep Alive & Repo Auto Refresh
 
 on:
   schedule:
-    # 毎日午前9時（日本時間）に自動実行 (UTC 00:00)
+    # 毎日午前9時（日本時間）に実行
     - cron: '0 0 * * *'
-  workflow_dispatch: # 手動で即時実行したい場合のためのボタンを有効化
+  workflow_dispatch:
 
 jobs:
   keep-alive:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # GitHubへの自動コミットを許可するために必須
     steps:
+      # 1. 確実にDBへアクティビティを起こす（実クエリの実行）
       - name: Send Request to Supabase API
         run: |
-          curl -i -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+          curl -i -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/spatial_ref_sys?limit=1" \
           -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
           -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+
+      # 2. リポジトリをチェックアウト
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 3. 週に1回だけ、ダミーのファイルを更新してリポジトリを「アクティブ」に保つ
+      # これによりGitHubの60日制限を完全に回避する
+      - name: Auto Commit to Prevent Github Actions Expiration
+        run: |
+          # 曜日の取得（0=日曜日, 1=月曜日...）
+          DAY_OF_WEEK=$(date +%u)
+          if [ "$DAY_OF_WEEK" = "1" ]; then
+            echo "Last refresh: $(date)" > .github/actions_keep_alive_timestamp.txt
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git add .github/actions_keep_alive_timestamp.txt
+            git commit -m "chore: auto-refresh repository to keep actions alive [skip ci]"
+            git push
+          fi
