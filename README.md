@@ -1,138 +1,136 @@
 # ResQGo
 
-**本番 URL:** https://resqgo.vercel.app  
-（初回のみ [Vercel Import](https://vercel.com/new/import?s=https://github.com/KanshoVector/resqgo) でリポジトリ接続・環境変数設定・Deploy が必要。完了後この URL で公開される）
+**本番:** https://resqgo.vercel.app  
+**コード:** https://github.com/KanshoVector/resqgo
 
-**リポジトリ:** https://github.com/KanshoVector/resqgo  
-**CI:** `main` push で TypeScript チェック + 本番ビルド（GitHub Actions）
+災害時に **位置情報付き SOS を未ログインで投稿**し、**ログイン後**に周辺の SOS・避難所を地図上で検索・経路確認できる Web アプリ。
 
-災害時に位置情報付きの救助要請（SOS）を投稿し、ログイン後に周辺の要請・避難所を地図上で検索・経路確認する Web アプリ。
+---
 
-## 何を解決するか
+## 位置づけ
+
+Firebase / Flutter のモバイルプロトタイプを、**Next.js + Supabase（PostGIS）** へリファクタした Web 版。被災者は **URL 1 本・ブラウザのみ**（インストール不要）。空間検索と権限境界は DB（PostGIS RPC + RLS）側に寄せている。
+
+---
+
+## 使い方
+
+### 被災者（未ログイン可）
+
+1. トップを開く → 現在地取得、または地図でピン微調整
+2. タイトル・緊急度・（任意）連絡先を送信
+3. 通信不可時 → QR で位置・要請を手渡し（`QrBatonRelay`）
+
+### 支援者（ログイン `user`）
+
+1. ログイン →「周辺状況・避難所を検索」
+2. 半径・緊急度・避難所状態で絞り込み（`sessionStorage` に保持）
+3. 一覧 / 地図から **アプリ内経路** または **Google Maps 徒歩ナビ**
+4. 新規 SOS → Realtime（INSERT）で一覧・地図を再取得
+
+### 避難所管理者（`shelter_admin`）
+
+1. 運用で `profiles.role` を `shelter_admin` に設定
+2. 検索結果下部の管理者メニューから、**表示中の避難所**の状態（開設中 / 満員 / 閉鎖）を更新
+
+### 避難所詳細 → 経路
+
+`/evacuation-centers/[id]` →「アプリ内で経路を表示」→ `/?tab=search&destLat=...` でトップ地図に描画
+
+---
+
+## 解決する課題
 
 | 課題 | 方針 |
 |------|------|
-| 被災者が「どこに・何が必要か」を素早く伝えたい | 未ログインでも SOS を 1 フォームで投稿可能 |
-| 支援者が周辺状況を把握したい | ログイン後、現在地半径内の SOS・避難所を PostGIS RPC で検索 |
-| 避難所と SOS のデータが混ざる | `emergency_locations` は SOS のみ。避難所は `evacuation_centers` に分離 |
-| 連絡先の漏洩 | RPC / 公開型から `contact_info` を除外 |
-| オフライン | QR コードで位置・要請内容を手動共有（`QrBatonRelay`） |
+| 被災者が素早く「どこに・何が必要か」を伝えたい | 未ログイン・1 フォームで SOS 投稿 |
+| 支援者が周辺を把握したい | ログイン後、PostGIS RPC で半径検索 |
+| SOS と避難所が混ざる | テーブル分離 + タイトルフィルタ（DB + `sos.ts`） |
+| 連絡先の公開範囲 | 公開 RPC / 返却型から `contact_info` を除外 |
+| 通信寸断 | QR による手動共有 |
 
 ---
 
-## 技術構成
+## どう動いているか
 
 ```
-Browser (Next.js 16 App Router)
-  ├─ Google Maps JS API … 地図ピン・徒歩経路ポリライン
-  ├─ Server Actions … SOS 投稿・検索
-  └─ Supabase Auth + PostgREST + RPC
-        ├─ emergency_locations (geography Point)
-        └─ evacuation_centers (geography Point)
+ブラウザ (Next.js App Router)
+ ├─ 地図・経路 … Google Maps JS API
+ ├─ 投稿・検索 … Server Actions
+ └─ Supabase … Auth + PostGIS RPC + RLS
+       ├─ emergency_locations  … SOS
+       └─ evacuation_centers     … 避難所
 ```
 
-- **DB:** Supabase（PostgreSQL + PostGIS）
-- **座標:** DB 内は `geography(Point,4326)`。フロントは GeoJSON と EWKB hex の両方を `src/lib/navigation.ts` で正規化（RPC 経由で形式が変わるため）
-- **外部マップ:** `NativeMapDirectionsLink` は `<a target="_blank">` のみ（`window.open` は使わない）
+**権限の線引き**
+
+| 操作 | 誰 | 経路 |
+|------|-----|------|
+| SOS 投稿 | 未ログイン可 | `create-emergency` → RLS で INSERT 許可 |
+| 周辺検索 | 要ログイン | RPC `search_nearby_*`（`contact_info` なし） |
+| 避難所更新 | `shelter_admin` | RLS + `updateShelterStatus` |
+
+**検索フォールバック**  
+指定半径で 0 件 → 半径 50000 m で再検索 → まだ 0 件なら `fetch_all_map_pins` で地図のみ更新。  
+**一覧は指定半径の結果のまま**（地図だけ広げる）。ロジックは `useEmergencyFeed.ts`。
+
+**Flutter/Firebase から変えた理由（要約）**  
+配信: アプリストア不要の Web。空間: GeoFire 相当を **PostGIS `st_dwithin` + GIST** に。境界: クライアント依存から **RLS + RPC** へ。
 
 ---
 
-## ローカル起動（Docker）
+## 実装パラメータ
 
-前提: Docker / Docker Compose が使えること。
+コード・マイグレーション上の定数・上限。
 
-```bash
-git clone https://github.com/KanshoVector/resqgo.git
-cd resqgo
-cp .env.example .env.local
-# .env.local に Supabase / Google Maps のキーを記入
-docker compose up --build
-```
-
-ブラウザで http://localhost:3000 を開く。
-
-初回ビルド後、`node_modules` は Docker ボリュームに保持される（ホスト側に Node を入れなくてよい）。
-
----
-
-## Supabase セットアップ
-
-1. Supabase でプロジェクト作成 → PostGIS 有効
-2. SQL Editor で `supabase/migrations/` 内の SQL を **0001 → 0005 の順** に実行
-3. Authentication で Email ログインを有効化（アカウント作成・ログイン用）
-4. `.env.local` / Vercel 環境変数に URL と anon key を設定
-
-| マイグレーション | 内容 |
-|------------------|------|
-| 0001 | 初期スキーマ（SOS テーブル、近傍検索 RPC） |
-| 0002 | 優先度・避難所・profiles・RLS |
-| 0003 | SOS 専用化、`fetch_all_map_pins` |
-| 0004 | 地図ピン RPC の GeoJSON 化 |
-| 0005 | 検索 RPC の GeoJSON 化（EWKB hex 返却問題の修正） |
-
-0004/0005 を適用しないと、一覧の座標パースと経路リンクが動作しない。
+| 項目 | 値 | 根拠 |
+|------|-----|------|
+| 検索半径（デフォルト） | 5000 m | `src/lib/schemas.ts`, `EmergencyForm` |
+| 検索半径（変更可能範囲） | 100〜50000 m | `schemas.ts`, `format-radius.ts`, `FilterBar` |
+| 0 件時の再検索半径 | 50000 m | `useEmergencyFeed.ts` |
+| RPC 半径の上限 | 50000 m | `supabase/migrations/0005`（`safe_radius`） |
+| 近傍 SOS 返却上限 | 200 件 | `search_nearby_emergencies` |
+| 近傍避難所返却上限 | 100 件 | `search_nearby_evacuation_centers` |
+| 地図フォールバック上限 | SOS・避難所 各 100 件 | `fetch_all_map_pins` |
+| SOS タイトル文字数上限 | 80 文字 | `emergencyInputSchema` |
+| 説明文字数上限 | 500 文字 | 同上 |
+| 位置情報取得タイムアウト | 10 秒 | `GeolocationGuard.tsx` |
+| QR 有効期限 | 6 時間 | `QrBatonRelay.tsx`（`QR_TTL_MS`） |
 
 ---
 
-## Vercel デプロイ（初回）
+## 設計判断
 
-1. https://vercel.com/new/import?s=https://github.com/KanshoVector/resqgo を開く
-2. Framework: **Next.js**（自動検出）
-3. Environment Variables:
-
-| 変数 | 説明 |
-|------|------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase プロジェクト URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public key |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Maps JavaScript API キー |
-
-4. **Deploy** → 完了後 `https://resqgo.vercel.app`（または Vercel が割り当てた URL）で公開
-5. 以降 `main` への push で自動再デプロイ
-
-Google Maps キーは **Maps JavaScript API** と **Directions API** を有効にし、Vercel の本番ドメインをキー制限に追加すること。
+1. **投稿は開、閲覧は閉** — SOS は未ログイン可。検索は認証必須（支援者側の説明責任）。
+2. **空間演算は DB** — 半径・距離順は RPC。一覧の距離表示のみ Haversine（表示用）。
+3. **公開データは Server 経由** — ブラウザからテーブル直接操作なし。検索は RPC、投稿は Server Action。
+4. **座標は `navigation.ts` に集約** — RPC は GeoJSON 返却。地図・URL・距離は `coordsFromLocation()` 一本化。
 
 ---
 
-## 主な機能
+## ファイルマップ
 
-- **SOS 投稿:** 現在地取得 or 地図ピン微調整 → タイトル・優先度・任意の連絡先
-- **周辺検索:** 半径・緊急度・避難所状態でフィルタ（`sessionStorage` に保持）
-- **経路:** アプリ内は Google Directions API のポリライン / 外部は Google Maps 徒歩ナビ
-- **避難所詳細:** `/evacuation-centers/[id]` → トップへクエリ付きで戻り経路表示
+| UC | 主なファイル |
+|----|--------------|
+| SOS 投稿 | `src/actions/create-emergency.ts`, `src/lib/sos.ts`, `src/components/QrBatonRelay.tsx`, `src/components/GeolocationGuard.tsx` |
+| 周辺検索 | `src/actions/search-emergency.ts`, `src/actions/evacuation-centers.ts`, `src/hooks/useEmergencyFeed.ts`, `src/components/FilterBar.tsx`, `src/components/EmergencyList.tsx`, `src/components/MapView.tsx` |
+| 避難所管理 | `src/actions/evacuation-centers.ts`, `src/components/ShelterAdminPanel.tsx`, `src/components/AuthProvider.tsx` |
+| 経路 | `src/app/evacuation-centers/[id]/page.tsx`, `src/lib/navigation.ts`, `src/lib/geo.ts`, `src/components/MapView.tsx` |
+| DB 定義 | `supabase/migrations/`（0001〜0005 適用済みが完成版） |
 
----
-
-## 設計上の判断（簡潔）
-
-1. **Server Actions + RPC** … RLS と `contact_info` 秘匿をサーバー側に集約。クライアントから直接テーブルを触らない。
-2. **SOS タイトルフィルタ**（`src/lib/sos.ts`）… 避難所名が SOS に混入するのを DB 削除 + アプリ側バリデーションの二段で防ぐ。
-3. **検索半径フォールバック**（`useEmergencyFeed`）… 半径内 0 件時に 50 km 拡大 → それでも 0 件なら `fetch_all_map_pins` で地図だけ全体表示。
-4. **座標パースの単一化**（`navigation.ts`）… PostGIS → PostgREST / `row_to_json` で GeoJSON・EWKB・WKT が混在するため、URL 生成とピン配置の前段を 1 関数に集約。
+中枢 UI: `src/components/EmergencyForm.tsx`（地図・タブ・投稿・検索を統合）
 
 ---
 
-## 既知の制限・今後の余地
+## 既知の制限
 
-- 交通情報・外部避難所 API 連携は未実装（以前のモックは削除済み）
-- 地図ピンは `google.maps.Marker`（非推奨警告あり）。Advanced Marker への移行は未着手
-- オフライン SOS は QR 共有のみ。PWA / バックグラウンド同期はなし
-- 避難所管理者（`shelter_admin`）のロール付与は Supabase `profiles` を手動更新する想定
-- 経路表示には現在地（ブラウザ位置情報）の許可が必要
-
----
-
-## 開発（Docker なし）
-
-```bash
-npm ci
-cp .env.example .env.local
-npm run dev
-```
-
-```bash
-npm run typecheck
-npm run build
-```
+- 外部避難所 API・交通情報連携なし
+- 地図マーカーは `google.maps.Marker`（非推奨警告あり）
+- オフラインは QR **生成のみ**（読取 UI / PWA / バックグラウンド同期なし）
+- `shelter_admin` 付与 UI なし（`profiles` 手動更新）
+- 経路描画には **ブラウザ位置情報の許可**が必要（拒否時は手動ピン）
+- 支援者認証は Email/Password のみ（身分証連携は未実装）
+- `contact_info` は DB に保存するが、**支援者が見る UI は未実装**
 
 ---
 
