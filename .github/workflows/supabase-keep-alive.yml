@@ -12,12 +12,18 @@ jobs:
     permissions:
       contents: write  # GitHubへの自動コミットを許可するために必須
     steps:
-      # 1. 確実にDBへアクティビティを起こす（実クエリの実行）
+      # 1. 専用のRPCを叩いて確実にDBにアクティビティを起こす
       - name: Send Request to Supabase API
         run: |
-          curl -i -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/spatial_ref_sys?limit=1" \
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/keep_alive_ping" \
           -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          
+          echo "HTTP Status Code: $RESPONSE"
+          if [ "$RESPONSE" != "200" ]; then
+            echo "Error: Supabase Keep Alive RPC failed with status $RESPONSE"
+            exit 1
+          fi
 
       # 2. リポジトリをチェックアウト
       - name: Checkout Repository
