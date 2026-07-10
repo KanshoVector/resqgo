@@ -3,7 +3,7 @@ name: Supabase Keep Alive & Repo Auto Refresh
 on:
   schedule:
     # 毎日午前9時（日本時間）に実行
-    - cron: '0 0 * * *'
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
