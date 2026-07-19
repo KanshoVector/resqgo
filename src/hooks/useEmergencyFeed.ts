@@ -10,8 +10,8 @@ import type {
 import {
   fetchAllMapPins,
   searchEmergency as searchEmergencyAction,
-  toPublicEmergency,
 } from "@/actions/search-emergency";
+import { toPublicEmergency } from "@/lib/emergency-mapper";
 import { searchEvacuationCenters } from "@/actions/evacuation-centers";
 import type { FilterState } from "@/components/FilterBar";
 

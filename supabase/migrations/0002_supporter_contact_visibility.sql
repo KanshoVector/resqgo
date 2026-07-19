@@ -1,9 +1,11 @@
 -- =============================================================================
 -- ResQGo — 支援者向け contact_info 返却（認証済み RPC のみ）
 -- =============================================================================
--- 既存データを保持したまま search / map fallback RPC を差し替え
+-- PostgreSQL は RETURNS TABLE の列変更に CREATE OR REPLACE 不可 → DROP 必須
 
-create or replace function public.search_nearby_emergencies(
+drop function if exists public.search_nearby_emergencies(double precision, double precision, double precision, text);
+
+create function public.search_nearby_emergencies(
   lat             double precision,
   lng             double precision,
   radius_meters   double precision default 5000,

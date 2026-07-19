@@ -39,14 +39,14 @@ description: >-
 ### 1. スキーマ適用（データリセットあり）
 
 ```
-Actions → Ops - Supabase Bootstrap → Run workflow
+Actions → Ops - Supabase Bootstrap → Run workflow（full_reset=false が通常）
 ```
 
 またはローカル:
 
 ```bash
-# jq + curl（scripts/apply-schema.sh 参照）
-bash scripts/apply-schema.sh
+bash scripts/apply-migrations.sh          # 0002+ のみ（データ保持）
+bash scripts/apply-migrations.sh full     # 0001 含む（§0 RESET で全データ削除）
 ```
 
 ### 2. 健全性確認
@@ -75,7 +75,7 @@ Actions → Ops - Supabase Keep Alive → Run workflow
 
 ## 変更時チェックリスト
 
-- [ ] `0001_resqgo_schema.sql` 更新
+- [ ] `supabase/migrations/` 更新（0002+ は増分、0001 は初回/full_reset のみ）
 - [ ] Bootstrap workflow 実行
 - [ ] `verify-supabase.sh` 通過
 - [ ] README / ADR 更新
