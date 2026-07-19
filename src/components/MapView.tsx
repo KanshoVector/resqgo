@@ -23,10 +23,12 @@ type MapViewProps = {
   shelters: PublicEvacuationCenter[];
   routeDestination: { lat: number; lng: number; label: string } | null;
   onClearRoute: () => void;
+  recenterRequest?: number;
   heightClass?: string;
 };
 
 const DEFAULT_CENTER = { lat: 35.6812, lng: 139.7671 };
+const USER_LOCATION_ZOOM = 16;
 
 export function MapView({
   pinPosition,
@@ -36,6 +38,7 @@ export function MapView({
   shelters,
   routeDestination,
   onClearRoute,
+  recenterRequest = 0,
   heightClass = "h-[45vh] min-h-[240px] sm:h-[50vh] md:min-h-[20rem]",
 }: MapViewProps) {
   const pinLat = pinPosition?.lat ?? null;
@@ -77,7 +80,7 @@ export function MapView({
           zoomControlOptions: {
             position: google.maps.ControlPosition.RIGHT_CENTER,
           },
-          gestureHandling: "cooperative",
+          gestureHandling: "greedy",
         });
         infoWindowRef.current = new google.maps.InfoWindow();
         mapRef.current = map;
@@ -274,8 +277,22 @@ export function MapView({
   }, [mapReady, pinLat, pinLng, routeLat, routeLng]);
 
   useEffect(() => {
+    if (!mapReady || !mapRef.current || recenterRequest === 0) return;
+    if (pinLat === null || pinLng === null) return;
+    if (routeLat !== null && routeLng !== null) return;
+
+    mapRef.current.panTo({ lat: pinLat, lng: pinLng });
+    const zoom = mapRef.current.getZoom();
+    if (zoom === undefined || zoom < USER_LOCATION_ZOOM) {
+      mapRef.current.setZoom(USER_LOCATION_ZOOM);
+    }
+  }, [recenterRequest, mapReady, pinLat, pinLng, routeLat, routeLng]);
+
+  useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     if (routeLat !== null && routeLng !== null) return;
+    // 現在地ピンがあるときは fitBounds しない（全ピンに引っ張られてズームアウトするのを防ぐ）
+    if (pinLat !== null && pinLng !== null) return;
 
     const bounds = new google.maps.LatLngBounds();
     let markerCount = 0;
@@ -296,15 +313,8 @@ export function MapView({
       }
     });
 
-    if (pinLat !== null && pinLng !== null) {
-      bounds.extend({ lat: pinLat, lng: pinLng });
-    }
-
     if (markerCount > 0) {
-      mapRef.current.fitBounds(bounds, 48);
-    } else if (pinLat !== null && pinLng !== null) {
-      mapRef.current.setCenter({ lat: pinLat, lng: pinLng });
-      mapRef.current.setZoom(14);
+      mapRef.current.fitBounds(bounds, 64);
     }
   }, [emergencies, shelters, mapReady, pinLat, pinLng, routeLat, routeLng]);
 

@@ -61,10 +61,12 @@ export function EmergencyForm() {
   const [adjustMode, setAdjustMode] = useState(false);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
+  const [recenterRequest, setRecenterRequest] = useState(0);
 
   const handlePositionChange = useCallback((newLat: number, newLng: number) => {
     setLat(newLat);
     setLng(newLng);
+    setRecenterRequest((n) => n + 1);
   }, []);
 
   const handleManualRequired = useCallback(() => {
@@ -83,6 +85,8 @@ export function EmergencyForm() {
         setLng={setLng}
         adjustMode={adjustMode}
         setAdjustMode={setAdjustMode}
+        recenterRequest={recenterRequest}
+        onRecenter={() => setRecenterRequest((n) => n + 1)}
       />
     </GeolocationGuard>
   );
@@ -95,6 +99,8 @@ type BodyProps = {
   setLng: (v: number) => void;
   adjustMode: boolean;
   setAdjustMode: (v: boolean) => void;
+  recenterRequest: number;
+  onRecenter: () => void;
 };
 
 function EmergencyFormBody({
@@ -104,6 +110,8 @@ function EmergencyFormBody({
   setLng,
   adjustMode,
   setAdjustMode,
+  recenterRequest,
+  onRecenter,
 }: BodyProps) {
   const { user, role } = useAuth();
   const { requestCurrentLocation, locating } = useGeolocation();
@@ -128,10 +136,15 @@ function EmergencyFormBody({
   } | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const draftLoadedRef = useRef(false);
+  const [draftReady, setDraftReady] = useState(false);
   const initialLocationRequested = useRef(false);
   const filtersLoadedRef = useRef(false);
   const mapSectionRef = useRef<HTMLElement>(null);
+
+  const handleGetLocation = useCallback(() => {
+    if (lat !== null && lng !== null) onRecenter();
+    requestCurrentLocation();
+  }, [lat, lng, onRecenter, requestCurrentLocation]);
 
   const pinPosition = lat !== null && lng !== null ? { lat, lng } : null;
   const isAuthenticated = !!user;
@@ -191,12 +204,12 @@ function EmergencyFormBody({
           lng: dLng,
           label: destLabel ?? "目的地",
         });
-        requestCurrentLocation();
+        handleGetLocation();
         showStatus("経路を表示しています。現在地の取得を許可してください。", "info");
         mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }
-  }, [searchParams, requestCurrentLocation, showStatus]);
+  }, [searchParams, handleGetLocation, showStatus]);
 
   const handleClearRoute = useCallback(() => {
     setRouteDestination(null);
@@ -206,10 +219,24 @@ function EmergencyFormBody({
   }, [router, searchParams]);
 
   useEffect(() => {
-    if (initialLocationRequested.current) return;
+    loadDraft().then((draft) => {
+      if (draft) {
+        setTitle(draft.title);
+        setDescription(draft.description);
+        setContactInfo(draft.contact_info);
+        if (draft.lat !== null) setLat(draft.lat);
+        if (draft.lng !== null) setLng(draft.lng);
+        setFilters((f) => ({ ...f, radiusMeters: draft.radiusMeters }));
+      }
+      setDraftReady(true);
+    });
+  }, [setLat, setLng]);
+
+  useEffect(() => {
+    if (!draftReady || initialLocationRequested.current) return;
     initialLocationRequested.current = true;
     requestCurrentLocation();
-  }, [requestCurrentLocation]);
+  }, [draftReady, requestCurrentLocation]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -224,20 +251,7 @@ function EmergencyFormBody({
   }, []);
 
   useEffect(() => {
-    loadDraft().then((draft) => {
-      if (!draft) return;
-      setTitle(draft.title);
-      setDescription(draft.description);
-      setContactInfo(draft.contact_info);
-      if (draft.lat !== null) setLat(draft.lat);
-      if (draft.lng !== null) setLng(draft.lng);
-      setFilters((f) => ({ ...f, radiusMeters: draft.radiusMeters }));
-      draftLoadedRef.current = true;
-    });
-  }, [setLat, setLng]);
-
-  useEffect(() => {
-    if (!draftLoadedRef.current && !title && !description) return;
+    if (!draftReady && !title && !description) return;
     const draft: EmergencyFormDraft = {
       title,
       description,
@@ -307,11 +321,11 @@ function EmergencyFormBody({
     (coords: { lat: number; lng: number }, label: string) => {
       setActiveTab("search");
       setRouteDestination({ lat: coords.lat, lng: coords.lng, label });
-      requestCurrentLocation();
+      handleGetLocation();
       showStatus(`「${label}」への経路を地図に表示しました。`, "info");
       mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
-    [requestCurrentLocation, showStatus],
+    [handleGetLocation, showStatus],
   );
 
   const handleSelectEmergency = (item: PublicEmergencyLocation) => {
@@ -339,7 +353,7 @@ function EmergencyFormBody({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={requestCurrentLocation}
+            onClick={handleGetLocation}
             disabled={locating}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 sm:text-sm"
           >
@@ -372,6 +386,7 @@ function EmergencyFormBody({
           shelters={isAuthenticated ? mapShelters : []}
           routeDestination={routeDestination}
           onClearRoute={handleClearRoute}
+          recenterRequest={recenterRequest}
         />
 
         {mapFallbackActive && isAuthenticated && (
