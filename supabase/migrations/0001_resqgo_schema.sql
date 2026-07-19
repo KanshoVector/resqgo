@@ -194,6 +194,12 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- RESET 後: 既存 auth.users の profiles を復元（新規 trigger は既存ユーザーに発火しない）
+insert into public.profiles (id, display_name)
+select u.id, coalesce(u.raw_user_meta_data->>'display_name', u.email)
+from auth.users u
+on conflict (id) do nothing;
+
 
 -- =============================================================================
 -- §7 Domain helpers
