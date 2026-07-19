@@ -78,7 +78,7 @@ Actions → Ops - Supabase Keep Alive → Run workflow
 
 ## 変更時チェックリスト
 
-- [ ] `supabase/migrations/` 更新（0002+ は incremental、0001 は apply_0001_reset=true のみ）
+- [ ] `supabase/migrations/` 更新（0002+ は incremental、0001 は apply_0001_reset=true のみ。デモ SOS は `0003_demo_sos_seed.sql`）
 - [ ] Bootstrap workflow 実行
 - [ ] `verify-supabase.sh` 通過
 - [ ] README / ADR 更新
