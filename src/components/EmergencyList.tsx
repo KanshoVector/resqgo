@@ -23,8 +23,11 @@ type EmergencyListProps = {
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  onFocusEmergency: (item: SupporterEmergencyLocation) => void;
+  onFocusShelter: (item: PublicEvacuationCenter) => void;
   onSelectEmergency: (item: SupporterEmergencyLocation) => void;
   onSelectShelter: (item: PublicEvacuationCenter) => void;
+  focusedItemId: string | null;
   isAuthenticated: boolean;
 };
 
@@ -56,8 +59,11 @@ export function EmergencyList({
   loading,
   error,
   onRetry,
+  onFocusEmergency,
+  onFocusShelter,
   onSelectEmergency,
   onSelectShelter,
+  focusedItemId,
   isAuthenticated,
 }: EmergencyListProps) {
   if (!isAuthenticated) {
@@ -119,7 +125,13 @@ export function EmergencyList({
                 origin && coords ? haversineMeters(origin, coords) : null;
               return (
                 <li key={item.id}>
-                  <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <article
+                    className={`rounded-lg border bg-white p-4 shadow-sm transition-colors ${
+                      focusedItemId === item.id
+                        ? "border-blue-400 ring-2 ring-blue-100"
+                        : "border-slate-200"
+                    }`}
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className="rounded px-2 py-0.5 text-xs font-bold text-white"
@@ -141,9 +153,14 @@ export function EmergencyList({
                       </span>
                     </div>
 
-                    <h4 className="mt-2 text-base font-bold text-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => onFocusEmergency(item)}
+                      className="mt-2 block w-full text-left text-base font-bold text-slate-900 underline-offset-2 hover:text-blue-800 hover:underline"
+                      title="地図上のピンへ移動"
+                    >
                       {item.title}
-                    </h4>
+                    </button>
 
                     {item.description ? (
                       <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
@@ -155,17 +172,22 @@ export function EmergencyList({
                       </p>
                     )}
 
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                      <p className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                        <Phone className="h-3.5 w-3.5" />
-                        連絡先（支援者のみ）
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm font-medium text-amber-950">
+                    <details className="group mt-3 rounded-lg border border-amber-200 bg-amber-50 open:pb-2">
+                      <summary className="cursor-pointer list-none px-3 py-2 text-xs font-bold text-amber-900 [&::-webkit-details-marker]:hidden">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5" />
+                          連絡先を表示（支援者のみ）
+                          <span className="font-normal text-amber-800 group-open:hidden">
+                            — タップで開く
+                          </span>
+                        </span>
+                      </summary>
+                      <p className="px-3 pt-1 whitespace-pre-wrap text-sm font-medium text-amber-950">
                         {item.contact_info?.trim()
                           ? item.contact_info
                           : "未記載 — 現地確認または近隣への声かけが必要"}
                       </p>
-                    </div>
+                    </details>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -197,7 +219,13 @@ export function EmergencyList({
                 origin && coords ? haversineMeters(origin, coords) : null;
               return (
                 <li key={item.id}>
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <div
+                    className={`rounded-lg border bg-white p-4 shadow-sm transition-colors ${
+                      focusedItemId === item.id
+                        ? "border-blue-400 ring-2 ring-blue-100"
+                        : "border-slate-200"
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className="rounded px-2 py-0.5 text-xs font-bold text-white"
@@ -216,7 +244,14 @@ export function EmergencyList({
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 font-bold text-slate-900">{item.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => onFocusShelter(item)}
+                      className="mt-1 block w-full text-left font-bold text-slate-900 underline-offset-2 hover:text-blue-800 hover:underline"
+                      title="地図上のピンへ移動"
+                    >
+                      {item.name}
+                    </button>
                     {item.address && (
                       <p className="mt-1 flex items-center gap-1 text-sm text-slate-600">
                         <MapPin className="h-3 w-3" />

@@ -19,7 +19,7 @@ import {
   GeolocationGuard,
   useGeolocation,
 } from "@/components/GeolocationGuard";
-import { MapView } from "@/components/MapView";
+import { MapView, type MapFocusTarget } from "@/components/MapView";
 import { QrBatonRelay } from "@/components/QrBatonRelay";
 import { ShelterAdminPanel } from "@/components/ShelterAdminPanel";
 import { useEmergencyFeed } from "@/hooks/useEmergencyFeed";
@@ -135,6 +135,9 @@ function EmergencyFormBody({
     lng: number;
     label: string;
   } | null>(null);
+  const [mapFocusTarget, setMapFocusTarget] = useState<MapFocusTarget | null>(null);
+  const [mapFocusRequest, setMapFocusRequest] = useState(0);
+  const [focusedListItemId, setFocusedListItemId] = useState<string | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [draftReady, setDraftReady] = useState(false);
@@ -370,6 +373,54 @@ function EmergencyFormBody({
     [handleGetLocation, showStatus],
   );
 
+  const focusOnMap = useCallback(
+    (target: MapFocusTarget) => {
+      setActiveTab("search");
+      setRouteDestination(null);
+      setMapFocusTarget(target);
+      setMapFocusRequest((n) => n + 1);
+      setFocusedListItemId(target.id);
+      mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [],
+  );
+
+  const handleFocusEmergency = useCallback(
+    (item: SupporterEmergencyLocation) => {
+      const coords = coordsFromLocation(item.location);
+      if (!coords) {
+        showStatus("位置情報を読み取れませんでした。", "error");
+        return;
+      }
+      focusOnMap({
+        lat: coords.lat,
+        lng: coords.lng,
+        label: item.title,
+        id: item.id,
+        kind: "emergency",
+      });
+    },
+    [focusOnMap, showStatus],
+  );
+
+  const handleFocusShelter = useCallback(
+    (item: PublicEvacuationCenter) => {
+      const coords = coordsFromLocation(item.location);
+      if (!coords) {
+        showStatus("位置情報を読み取れませんでした。", "error");
+        return;
+      }
+      focusOnMap({
+        lat: coords.lat,
+        lng: coords.lng,
+        label: item.name,
+        id: item.id,
+        kind: "shelter",
+      });
+    },
+    [focusOnMap, showStatus],
+  );
+
   const handleSelectEmergency = (item: SupporterEmergencyLocation) => {
     const coords = coordsFromLocation(item.location);
     if (!coords) {
@@ -377,6 +428,7 @@ function EmergencyFormBody({
       return;
     }
     showInAppRoute(coords, item.title);
+    setFocusedListItemId(item.id);
   };
 
   const handleSelectShelter = (item: PublicEvacuationCenter) => {
@@ -386,6 +438,7 @@ function EmergencyFormBody({
       return;
     }
     showInAppRoute(coords, item.name);
+    setFocusedListItemId(item.id);
   };
 
   return (
@@ -400,6 +453,8 @@ function EmergencyFormBody({
           routeDestination={routeDestination}
           onClearRoute={handleClearRoute}
           recenterRequest={recenterRequest}
+          focusTarget={mapFocusTarget}
+          focusRequest={mapFocusRequest}
         />
 
         {mapFallbackActive && isAuthenticated && activeTab === "search" && (
@@ -618,7 +673,7 @@ function EmergencyFormBody({
           )}
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900 sm:text-sm">
             <Search className="mr-1 inline h-4 w-4" />
-            距離は「🚨 救助要請を送信する」で設定した位置を基準に表示します。位置が未設定の場合は先にそちらでピンを置いてください。
+            距離は「🚨 救助要請を送信する」で設定した位置を基準に表示します。一覧のタイトルをタップすると地図のピンへズームします。
           </div>
           {isAuthenticated ? (
             <>
@@ -630,8 +685,11 @@ function EmergencyFormBody({
                 loading={loading}
                 error={error}
                 onRetry={retry}
+                onFocusEmergency={handleFocusEmergency}
+                onFocusShelter={handleFocusShelter}
                 onSelectEmergency={handleSelectEmergency}
                 onSelectShelter={handleSelectShelter}
+                focusedItemId={focusedListItemId}
                 isAuthenticated
               />
               {role === "shelter_admin" && shelters.length > 0 && (
@@ -646,8 +704,11 @@ function EmergencyFormBody({
               loading={false}
               error={null}
               onRetry={() => {}}
+              onFocusEmergency={() => {}}
+              onFocusShelter={() => {}}
               onSelectEmergency={() => {}}
               onSelectShelter={() => {}}
+              focusedItemId={null}
               isAuthenticated={false}
             />
           )}

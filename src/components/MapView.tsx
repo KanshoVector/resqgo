@@ -15,6 +15,14 @@ import type {
   PublicEvacuationCenter,
 } from "@/lib/types/public";
 
+export type MapFocusTarget = {
+  lat: number;
+  lng: number;
+  label: string;
+  id: string;
+  kind: "emergency" | "shelter";
+};
+
 type MapViewProps = {
   pinPosition: { lat: number; lng: number } | null;
   onPinMove: (lat: number, lng: number) => void;
@@ -24,11 +32,14 @@ type MapViewProps = {
   routeDestination: { lat: number; lng: number; label: string } | null;
   onClearRoute: () => void;
   recenterRequest?: number;
+  focusTarget?: MapFocusTarget | null;
+  focusRequest?: number;
   heightClass?: string;
 };
 
 const DEFAULT_CENTER = { lat: 35.6812, lng: 139.7671 };
 const USER_LOCATION_ZOOM = 16;
+const PIN_FOCUS_ZOOM = 16;
 
 export function MapView({
   pinPosition,
@@ -39,6 +50,8 @@ export function MapView({
   routeDestination,
   onClearRoute,
   recenterRequest = 0,
+  focusTarget = null,
+  focusRequest = 0,
   heightClass = "h-[45vh] min-h-[240px] sm:h-[50vh] md:min-h-[20rem]",
 }: MapViewProps) {
   const pinLat = pinPosition?.lat ?? null;
@@ -49,7 +62,11 @@ export function MapView({
   const mapRef = useRef<google.maps.Map | null>(null);
   const pinMarkerRef = useRef<google.maps.Marker | null>(null);
   const emergencyMarkersRef = useRef<google.maps.Marker[]>([]);
+  const emergencyMarkersByIdRef = useRef<Map<string, google.maps.Marker>>(new Map());
   const shelterMarkersRef = useRef<google.maps.Marker[]>([]);
+  const shelterMarkersByIdRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  const emergenciesRef = useRef(emergencies);
+  const sheltersRef = useRef(shelters);
   const routeLineRef = useRef<google.maps.Polyline | null>(null);
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
@@ -99,6 +116,14 @@ export function MapView({
   useEffect(() => {
     adjustModeRef.current = adjustMode;
   }, [adjustMode]);
+
+  useEffect(() => {
+    emergenciesRef.current = emergencies;
+  }, [emergencies]);
+
+  useEffect(() => {
+    sheltersRef.current = shelters;
+  }, [shelters]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -162,6 +187,7 @@ export function MapView({
 
     emergencyMarkersRef.current.forEach((m) => m.setMap(null));
     emergencyMarkersRef.current = [];
+    emergencyMarkersByIdRef.current.clear();
 
     emergencies.forEach((emergency) => {
       const coords = coordsFromLocation(emergency.location);
@@ -195,6 +221,7 @@ export function MapView({
       });
 
       emergencyMarkersRef.current.push(marker);
+      emergencyMarkersByIdRef.current.set(emergency.id, marker);
     });
   }, [emergencies, mapReady]);
 
@@ -203,6 +230,7 @@ export function MapView({
 
     shelterMarkersRef.current.forEach((m) => m.setMap(null));
     shelterMarkersRef.current = [];
+    shelterMarkersByIdRef.current.clear();
 
     shelters.forEach((shelter) => {
       const coords = coordsFromLocation(shelter.location);
@@ -236,6 +264,7 @@ export function MapView({
       });
 
       shelterMarkersRef.current.push(marker);
+      shelterMarkersByIdRef.current.set(shelter.id, marker);
     });
   }, [shelters, mapReady]);
 
@@ -287,6 +316,55 @@ export function MapView({
       mapRef.current.setZoom(USER_LOCATION_ZOOM);
     }
   }, [recenterRequest, mapReady, pinLat, pinLng, routeLat, routeLng]);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || focusRequest === 0 || !focusTarget) return;
+
+    const { lat, lng, id, kind, label } = focusTarget;
+    mapRef.current.panTo({ lat, lng });
+    const zoom = mapRef.current.getZoom();
+    if (zoom === undefined || zoom < PIN_FOCUS_ZOOM) {
+      mapRef.current.setZoom(PIN_FOCUS_ZOOM);
+    }
+
+    const marker =
+      kind === "emergency"
+        ? emergencyMarkersByIdRef.current.get(id)
+        : shelterMarkersByIdRef.current.get(id);
+
+    if (marker && infoWindowRef.current) {
+      marker.setAnimation(google.maps.Animation.BOUNCE);
+      window.setTimeout(() => marker.setAnimation(null), 1400);
+
+      if (kind === "emergency") {
+        const emergency = emergenciesRef.current.find((e) => e.id === id);
+        if (emergency) {
+          const navUrl = getGoogleMapsUrl(emergency.location);
+          infoWindowRef.current.setContent(`
+            <div style="font-family:sans-serif;max-width:240px;color:#0f172a">
+              <strong>${escapeHtml(label)}</strong>
+              <p style="font-size:12px;margin:4px 0">緊急度: ${emergency.priority}</p>
+              ${emergency.description ? `<p style="font-size:12px">${escapeHtml(emergency.description)}</p>` : ""}
+              ${navUrl ? `<a href="${navUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;font-size:12px;color:#2563eb;text-decoration:underline">Googleマップで経路を表示</a>` : ""}
+            </div>`);
+          infoWindowRef.current.open({ map: mapRef.current, anchor: marker });
+        }
+      } else {
+        const shelter = sheltersRef.current.find((s) => s.id === id);
+        if (shelter) {
+          const navUrl = getGoogleMapsUrl(shelter.location);
+          infoWindowRef.current.setContent(`
+            <div style="font-family:sans-serif;max-width:220px;color:#0f172a">
+              <strong>${escapeHtml(label)}</strong>
+              <p style="font-size:12px;margin:4px 0">${escapeHtml(shelter.address ?? "")}</p>
+              <a href="/evacuation-centers/${shelter.id}" style="font-size:12px;color:#2563eb">詳細を見る</a>
+              ${navUrl ? `<br /><a href="${navUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;font-size:12px;color:#2563eb;text-decoration:underline">Googleマップで経路を表示</a>` : ""}
+            </div>`);
+          infoWindowRef.current.open({ map: mapRef.current, anchor: marker });
+        }
+      }
+    }
+  }, [focusRequest, focusTarget, mapReady]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
