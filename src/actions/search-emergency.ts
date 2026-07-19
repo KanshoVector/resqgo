@@ -7,12 +7,14 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type {
   PublicEmergencyLocation,
   PublicEvacuationCenter,
+  SupporterEmergencyLocation,
 } from "@/lib/types/public";
 
-const PUBLIC_EMERGENCY_KEYS = [
+const SUPPORTER_EMERGENCY_KEYS = [
   "id",
   "title",
   "description",
+  "contact_info",
   "location",
   "status",
   "priority",
@@ -20,15 +22,24 @@ const PUBLIC_EMERGENCY_KEYS = [
   "created_at",
 ] as const;
 
-function toPublicEmergency(row: Record<string, unknown>): PublicEmergencyLocation {
+function toSupporterEmergency(
+  row: Record<string, unknown>,
+): SupporterEmergencyLocation {
   return Object.fromEntries(
-    PUBLIC_EMERGENCY_KEYS.map((k) => [k, row[k]]),
-  ) as PublicEmergencyLocation;
+    SUPPORTER_EMERGENCY_KEYS.map((k) => [k, row[k] ?? null]),
+  ) as SupporterEmergencyLocation;
+}
+
+export function toPublicEmergency(
+  item: SupporterEmergencyLocation,
+): PublicEmergencyLocation {
+  const { contact_info: _, ...rest } = item;
+  return rest;
 }
 
 export async function searchEmergency(
   input: unknown,
-): Promise<ActionResult<PublicEmergencyLocation[]>> {
+): Promise<ActionResult<SupporterEmergencyLocation[]>> {
   const parsed = searchSchema.safeParse(input);
 
   if (!parsed.success) {
@@ -68,7 +79,7 @@ export async function searchEmergency(
     }
 
     const rows = (data ?? []) as Record<string, unknown>[];
-    return { ok: true, data: filterSosEmergencies(rows.map(toPublicEmergency)) };
+    return { ok: true, data: filterSosEmergencies(rows.map(toSupporterEmergency)) };
   } catch (err) {
     console.error("[searchEmergency] Unexpected error:", err);
     return {
@@ -81,7 +92,7 @@ export async function searchEmergency(
 
 export async function fetchAllMapPins(): Promise<
   ActionResult<{
-    emergencies: PublicEmergencyLocation[];
+    emergencies: SupporterEmergencyLocation[];
     shelters: PublicEvacuationCenter[];
   }>
 > {
@@ -119,7 +130,7 @@ export async function fetchAllMapPins(): Promise<
       ok: true,
       data: {
         emergencies: filterSosEmergencies(
-          (payload.emergencies ?? []).map(toPublicEmergency),
+          (payload.emergencies ?? []).map(toSupporterEmergency),
         ),
         shelters: (payload.shelters ?? []) as PublicEvacuationCenter[],
       },

@@ -65,7 +65,6 @@ export function GeolocationGuard({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         onPositionChange(pos.coords.latitude, pos.coords.longitude);
-        pushToast("info", "現在地を取得しました。");
         setLocating(false);
       },
       (err) => {

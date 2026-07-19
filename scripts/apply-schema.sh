@@ -26,14 +26,16 @@ fi
 REF="${URL#https://}"
 REF="${REF%%.supabase.co*}"
 
-SQL_JSON=$(jq -Rs . "$ROOT/supabase/migrations/0001_resqgo_schema.sql")
-HTTP=$(curl -s -o /tmp/resqgo_apply.json -w "%{http_code}" \
-  -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"query\": ${SQL_JSON}}")
-
-echo "HTTP ${HTTP}"
-cat /tmp/resqgo_apply.json
-[[ "$HTTP" == "200" || "$HTTP" == "201" ]] || exit 1
-echo "Schema applied. Run: bash scripts/verify-supabase.sh"
+for f in "$ROOT"/supabase/migrations/*.sql; do
+  echo "Applying $(basename "$f") ..."
+  SQL_JSON=$(jq -Rs . "$f")
+  HTTP=$(curl -s -o /tmp/resqgo_apply.json -w "%{http_code}" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": ${SQL_JSON}}" \
+    -X POST "https://api.supabase.com/v1/projects/${REF}/database/query")
+  echo "HTTP ${HTTP}"
+  cat /tmp/resqgo_apply.json
+  [[ "$HTTP" == "200" || "$HTTP" == "201" ]] || exit 1
+done
+echo "All migrations applied. Run: bash scripts/verify-supabase.sh"

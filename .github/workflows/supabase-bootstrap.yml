@@ -30,15 +30,18 @@ jobs:
           fi
           REF="${SUPABASE_URL#https://}"
           REF="${REF%%.supabase.co*}"
-          SQL_JSON=$(jq -Rs . supabase/migrations/0001_resqgo_schema.sql)
-          HTTP=$(curl -s -o /tmp/apply_out.json -w "%{http_code}" \
-            -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\": ${SQL_JSON}}")
-          echo "Management API HTTP ${HTTP}"
-          cat /tmp/apply_out.json
-          [[ "$HTTP" == "200" || "$HTTP" == "201" ]] || exit 1
+          for f in supabase/migrations/*.sql; do
+            echo "Applying $(basename "$f") ..."
+            SQL_JSON=$(jq -Rs . "$f")
+            HTTP=$(curl -s -o /tmp/apply_out.json -w "%{http_code}" \
+              -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"query\": ${SQL_JSON}}")
+            echo "Management API HTTP ${HTTP}"
+            cat /tmp/apply_out.json
+            [[ "$HTTP" == "200" || "$HTTP" == "201" ]] || exit 1
+          done
 
       - name: Smoke test (anon key)
         env:

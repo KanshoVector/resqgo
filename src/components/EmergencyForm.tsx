@@ -30,9 +30,10 @@ import {
   type EmergencyFormDraft,
 } from "@/lib/draft-storage";
 import { coordsFromLocation } from "@/lib/navigation";
+import { SOS_TEMPLATES, type SosTemplate } from "@/lib/sos-templates";
 import type {
   EmergencyPriority,
-  PublicEmergencyLocation,
+  SupporterEmergencyLocation,
   PublicEvacuationCenter,
 } from "@/lib/types/public";
 
@@ -146,6 +147,22 @@ function EmergencyFormBody({
     requestCurrentLocation();
   }, [lat, lng, onRecenter, requestCurrentLocation]);
 
+  const focusReportTab = useCallback(() => {
+    setActiveTab("report");
+  }, []);
+
+  const toggleAdjustMode = useCallback(() => {
+    focusReportTab();
+    setAdjustMode(!adjustMode);
+  }, [adjustMode, focusReportTab, setAdjustMode]);
+
+  const applyTemplate = useCallback((template: SosTemplate) => {
+    focusReportTab();
+    setTitle(template.title);
+    setDescription(template.description);
+    setPriority(template.priority);
+  }, [focusReportTab]);
+
   const pinPosition = lat !== null && lng !== null ? { lat, lng } : null;
   const isAuthenticated = !!user;
 
@@ -211,6 +228,11 @@ function EmergencyFormBody({
     }
   }, [searchParams, handleGetLocation, showStatus]);
 
+  useEffect(() => {
+    if (!adjustMode) return;
+    focusReportTab();
+  }, [adjustMode, focusReportTab]);
+
   const handleClearRoute = useCallback(() => {
     setRouteDestination(null);
     if (searchParams.get("destLat")) {
@@ -268,10 +290,11 @@ function EmergencyFormBody({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [title, description, contactInfo, lat, lng, filters.radiusMeters]);
+  }, [title, description, contactInfo, lat, lng, filters.radiusMeters, draftReady]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    focusReportTab();
     if (lat === null || lng === null) {
       showStatus(
         "位置情報を取得するか、位置微調整モードで地図上にピンを設定してください。",
@@ -328,7 +351,7 @@ function EmergencyFormBody({
     [handleGetLocation, showStatus],
   );
 
-  const handleSelectEmergency = (item: PublicEmergencyLocation) => {
+  const handleSelectEmergency = (item: SupporterEmergencyLocation) => {
     const coords = coordsFromLocation(item.location);
     if (!coords) {
       showStatus("位置情報を読み取れませんでした。", "error");
@@ -348,62 +371,25 @@ function EmergencyFormBody({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* マップ主軸 — ファーストビュー */}
       <section ref={mapSectionRef} className="space-y-2 scroll-mt-4">
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleGetLocation}
-            disabled={locating}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 sm:text-sm"
-          >
-            {locating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Crosshair className="h-4 w-4 text-red-600" />
-            )}
-            現在地を取得
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdjustMode(!adjustMode)}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold shadow-sm sm:text-sm ${
-              adjustMode
-                ? "border-amber-500 bg-amber-100 text-amber-900"
-                : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
-            }`}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            {adjustMode ? "微調整 ON" : "位置を微調整"}
-          </button>
-        </div>
-
         <MapView
           pinPosition={pinPosition}
           onPinMove={handlePinMove}
           adjustMode={adjustMode}
-          emergencies={isAuthenticated ? mapEmergencies : []}
-          shelters={isAuthenticated ? mapShelters : []}
+          emergencies={isAuthenticated && activeTab === "search" ? mapEmergencies : []}
+          shelters={isAuthenticated && activeTab === "search" ? mapShelters : []}
           routeDestination={routeDestination}
           onClearRoute={handleClearRoute}
           recenterRequest={recenterRequest}
         />
 
-        {mapFallbackActive && isAuthenticated && (
+        {mapFallbackActive && isAuthenticated && activeTab === "search" && (
           <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
             現在地の検索半径内にデータがありません。登録済みの要請・避難所を地図に表示しています。
           </p>
         )}
-
-        {pinPosition && (
-          <p className="flex items-center gap-1.5 text-xs text-slate-600 sm:text-sm">
-            <MapPin className="h-3.5 w-3.5 text-red-600" />
-            {pinPosition.lat.toFixed(5)}, {pinPosition.lng.toFixed(5)}
-          </p>
-        )}
       </section>
 
-      {/* コンテキスト切り替えタブ */}
       <div
         role="tablist"
         aria-label="操作モード"
@@ -453,11 +439,77 @@ function EmergencyFormBody({
       )}
 
       {activeTab === "report" ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <h2 className="mb-4 text-base font-bold text-slate-900 sm:text-lg">
-            救助要請の送信
-          </h2>
+        <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 sm:text-lg">
+              救助要請の送信
+            </h2>
+            <p className="mt-1 text-xs text-slate-600 sm:text-sm">
+              ここで設定した位置が、支援者検索時の距離計算の基準になります。
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                focusReportTab();
+                handleGetLocation();
+              }}
+              disabled={locating}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 sm:text-sm"
+            >
+              {locating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Crosshair className="h-4 w-4 text-red-600" />
+              )}
+              現在地を取得
+            </button>
+            <button
+              type="button"
+              onClick={toggleAdjustMode}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold shadow-sm sm:text-sm ${
+                adjustMode
+                  ? "border-amber-500 bg-amber-100 text-amber-900"
+                  : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+              }`}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {adjustMode ? "微調整 ON" : "位置を微調整"}
+            </button>
+          </div>
+
+          {pinPosition ? (
+            <p className="flex items-center gap-1.5 text-xs text-slate-600 sm:text-sm">
+              <MapPin className="h-3.5 w-3.5 text-red-600" />
+              送信位置: {pinPosition.lat.toFixed(5)}, {pinPosition.lng.toFixed(5)}
+            </p>
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+              位置未設定 — 現在地取得または微調整でピンを置いてください。
+            </p>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-700">
+                状況を選ぶ（タップで入力）
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SOS_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => applyTemplate(template)}
+                    className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 sm:text-sm"
+                  >
+                    {template.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <label htmlFor="title" className="mb-1 block text-sm font-semibold text-slate-700">
                 状況タイトル <span className="text-red-600">*</span>
@@ -481,8 +533,8 @@ function EmergencyFormBody({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={500}
-                rows={3}
-                placeholder="建物の状態、必要な支援内容など"
+                rows={4}
+                placeholder="建物の状態、必要な支援内容、到着可能時間など"
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
               />
             </div>
@@ -503,13 +555,13 @@ function EmergencyFormBody({
             </div>
             <div>
               <label htmlFor="contact" className="mb-1 block text-sm font-semibold text-slate-700">
-                連絡先（非公開）
+                連絡先（非公開・支援者のみ閲覧）
               </label>
               <input
                 id="contact"
                 value={contactInfo}
                 onChange={(e) => setContactInfo(e.target.value)}
-                placeholder="支援者のみが参照できる連絡先"
+                placeholder="電話番号・LINE ID など（ログイン支援者にのみ表示）"
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
               />
             </div>
@@ -526,8 +578,9 @@ function EmergencyFormBody({
               救助要請を送信
             </button>
           </form>
+
           {!isOnline && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+            <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
               <WifiOff className="h-5 w-5" />
               オフライン — QRコードによる情報共有が利用されます
             </div>
@@ -535,9 +588,9 @@ function EmergencyFormBody({
         </section>
       ) : (
         <section className="space-y-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <Search className="h-4 w-4 text-blue-600" />
-            現在地を中心に周辺情報を表示します
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900 sm:text-sm">
+            <Search className="mr-1 inline h-4 w-4" />
+            距離は「🚨 救助要請を送信する」で設定した位置を基準に表示します。位置が未設定の場合は先にそちらでピンを置いてください。
           </div>
           {isAuthenticated ? (
             <>

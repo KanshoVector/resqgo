@@ -5,16 +5,18 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type {
   PublicEmergencyLocation,
   PublicEvacuationCenter,
+  SupporterEmergencyLocation,
 } from "@/lib/types/public";
 import {
   fetchAllMapPins,
   searchEmergency as searchEmergencyAction,
+  toPublicEmergency,
 } from "@/actions/search-emergency";
 import { searchEvacuationCenters } from "@/actions/evacuation-centers";
 import type { FilterState } from "@/components/FilterBar";
 
 type FeedState = {
-  emergencies: PublicEmergencyLocation[];
+  emergencies: SupporterEmergencyLocation[];
   shelters: PublicEvacuationCenter[];
   mapEmergencies: PublicEmergencyLocation[];
   mapShelters: PublicEvacuationCenter[];
@@ -91,7 +93,7 @@ export function useEmergencyFeed(
 
     let emergencies = emResult.data;
     let shelters = shResult.data;
-    let mapEmergencies = emergencies;
+    let mapEmergencies = emergencies.map(toPublicEmergency);
     let mapShelters = shelters;
     let mapFallbackActive = false;
 
@@ -103,13 +105,13 @@ export function useEmergencyFeed(
       ]);
 
       if (emWide.ok && shWide.ok && emWide.data.length + shWide.data.length > 0) {
-        mapEmergencies = emWide.data;
+        mapEmergencies = emWide.data.map(toPublicEmergency);
         mapShelters = shWide.data;
         mapFallbackActive = true;
       } else {
         const allPins = await fetchAllMapPins();
         if (allPins.ok && allPins.data.emergencies.length + allPins.data.shelters.length > 0) {
-          mapEmergencies = allPins.data.emergencies;
+          mapEmergencies = allPins.data.emergencies.map(toPublicEmergency);
           mapShelters = allPins.data.shelters;
           mapFallbackActive = true;
         }

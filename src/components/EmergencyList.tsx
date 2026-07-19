@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertCircle, MapPin, RefreshCw } from "lucide-react";
+import { AlertCircle, Clock, MapPin, Phone, RefreshCw } from "lucide-react";
 import { NativeMapDirectionsLink } from "@/components/NativeMapDirectionsLink";
 import { coordsFromLocation } from "@/lib/navigation";
 import {
@@ -12,18 +12,18 @@ import {
   SHELTER_STATUS_LABELS,
 } from "@/lib/geo";
 import type {
-  PublicEmergencyLocation,
   PublicEvacuationCenter,
+  SupporterEmergencyLocation,
 } from "@/lib/types/public";
 
 type EmergencyListProps = {
-  emergencies: PublicEmergencyLocation[];
+  emergencies: SupporterEmergencyLocation[];
   shelters: PublicEvacuationCenter[];
   origin: { lat: number; lng: number } | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-  onSelectEmergency: (item: PublicEmergencyLocation) => void;
+  onSelectEmergency: (item: SupporterEmergencyLocation) => void;
   onSelectShelter: (item: PublicEvacuationCenter) => void;
   isAuthenticated: boolean;
 };
@@ -36,6 +36,17 @@ function SkeletonCard() {
       <div className="h-3 w-1/2 rounded bg-slate-100" />
     </div>
   );
+}
+
+function formatPostedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function EmergencyList({
@@ -108,8 +119,8 @@ export function EmergencyList({
                 origin && coords ? haversineMeters(origin, coords) : null;
               return (
                 <li key={item.id}>
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-2">
+                  <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span
                         className="rounded px-2 py-0.5 text-xs font-bold text-white"
                         style={{ backgroundColor: PRIORITY_COLORS[item.priority] }}
@@ -117,18 +128,46 @@ export function EmergencyList({
                         緊急度: {PRIORITY_LABELS[item.priority]}
                       </span>
                       {dist !== null && (
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs font-semibold text-slate-600">
+                          あなたから{" "}
                           {dist < 1000
                             ? `${Math.round(dist)}m`
                             : `${(dist / 1000).toFixed(1)}km`}
                         </span>
                       )}
+                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                        <Clock className="h-3 w-3" />
+                        {formatPostedAt(item.created_at)}
+                      </span>
                     </div>
-                    <p className="mt-1 font-bold text-slate-900">{item.title}</p>
-                    {item.description && (
-                      <p className="mt-1 text-sm text-slate-600">{item.description}</p>
+
+                    <h4 className="mt-2 text-base font-bold text-slate-900">
+                      {item.title}
+                    </h4>
+
+                    {item.description ? (
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                        {item.description}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm italic text-slate-400">
+                        詳細説明なし
+                      </p>
                     )}
-                    <div className="mt-2 flex flex-wrap gap-2">
+
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                        <Phone className="h-3.5 w-3.5" />
+                        連絡先（支援者のみ）
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm font-medium text-amber-950">
+                        {item.contact_info?.trim()
+                          ? item.contact_info
+                          : "未記載 — 現地確認または近隣への声かけが必要"}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => onSelectEmergency(item)}
@@ -138,7 +177,7 @@ export function EmergencyList({
                       </button>
                       <NativeMapDirectionsLink location={item.location} />
                     </div>
-                  </div>
+                  </article>
                 </li>
               );
             })}
@@ -169,7 +208,8 @@ export function EmergencyList({
                         {SHELTER_STATUS_LABELS[item.facility_status]}
                       </span>
                       {dist !== null && (
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs font-semibold text-slate-600">
+                          あなたから{" "}
                           {dist < 1000
                             ? `${Math.round(dist)}m`
                             : `${(dist / 1000).toFixed(1)}km`}

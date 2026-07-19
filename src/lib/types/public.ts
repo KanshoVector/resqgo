@@ -1,4 +1,4 @@
-/** Client-safe types — contact_info must never appear here */
+/** Map / 公開面 — contact_info を含めない */
 
 export type EmergencyPriority = "high" | "medium" | "low";
 
@@ -11,6 +11,11 @@ export type PublicEmergencyLocation = {
   priority: EmergencyPriority;
   created_by: string | null;
   created_at: string;
+};
+
+/** ログイン支援者向け一覧 — RPC 経由のみ contact_info を付与 */
+export type SupporterEmergencyLocation = PublicEmergencyLocation & {
+  contact_info: string | null;
 };
 
 export type ShelterStatus = "open" | "full" | "closed";
