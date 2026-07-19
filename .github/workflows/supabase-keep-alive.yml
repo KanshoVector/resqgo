@@ -1,45 +1,38 @@
-name: Supabase Keep Alive & Repo Auto Refresh
+name: Ops - Supabase Keep Alive
 
 on:
   schedule:
-    # 毎日午前9時（日本時間）に実行
-    - cron: '0 */6 * * *'
+    # Free Plan pause 回避: 7 日間の DB アクティビティ不足で pause（公式 2026-07）
+    # 「typically a few user requests to the database each day」→ 1 日 4 回（6 時間ごと）
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: supabase-keep-alive
+  cancel-in-progress: false
+
 jobs:
-  keep-alive:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping keep_alive_ping (DB INSERT)
+        run: |
+          set -euo pipefail
+          BODY=$(curl -sf -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/keep_alive_ping" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "Response: $BODY"
+          echo "$BODY" | grep -q '"status".*"ok"' || {
+            echo "Unexpected keep_alive_ping response"
+            exit 1
+          }
+
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # GitHubへの自動コミットを許可するために必須
+      actions: write
     steps:
-      # 1. 専用のRPCを叩いて確実にDBにアクティビティを起こす
-      - name: Send Request to Supabase API
-        run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/keep_alive_ping" \
-          -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
-          
-          echo "HTTP Status Code: $RESPONSE"
-          if [ "$RESPONSE" != "200" ]; then
-            echo "Error: Supabase Keep Alive RPC failed with status $RESPONSE"
-            exit 1
-          fi
-
-      # 2. リポジトリをチェックアウト
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # 3. 週に1回だけ、ダミーのファイルを更新してリポジトリを「アクティブ」に保つ
-      # これによりGitHubの60日制限を完全に回避する
-      - name: Auto Commit to Prevent Github Actions Expiration
-        run: |
-          # 曜日の取得（0=日曜日, 1=月曜日...）
-          DAY_OF_WEEK=$(date +%u)
-          if [ "$DAY_OF_WEEK" = "1" ]; then
-            echo "Last refresh: $(date)" > .github/actions_keep_alive_timestamp.txt
-            git config --local user.email "action@github.com"
-            git config --local user.name "GitHub Action"
-            git add .github/actions_keep_alive_timestamp.txt
-            git commit -m "chore: auto-refresh repository to keep actions alive [skip ci]"
-            git push
-          fi
+      - uses: liskin/gh-workflow-keepalive@v1

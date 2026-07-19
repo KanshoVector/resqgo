@@ -1,0 +1,22 @@
+name: Ops - Supabase Smoke Test
+
+on:
+  schedule:
+    - cron: "30 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run RPC smoke tests
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          export NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL"
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+          bash scripts/verify-supabase.sh

@@ -1,0 +1,37 @@
+name: Ops - Supabase Bootstrap
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  apply-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply schema via psql
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SUPABASE_DB_URL:-}" ]]; then
+            echo "ERROR: Repository secret SUPABASE_DB_URL is not set."
+            echo "Dashboard → Project Settings → Database → Connection string (URI)"
+            exit 1
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client > /dev/null
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0001_resqgo_schema.sql
+
+      - name: Smoke test (anon key)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          export NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL"
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+          bash scripts/verify-supabase.sh
