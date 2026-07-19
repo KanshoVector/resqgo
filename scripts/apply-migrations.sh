@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Management API 経由で migrations を適用（SUPABASE_DB_URL 不要）
-# デフォルト: 0002 以降のみ（0001 の §0 RESET でデータ消去しない）
+#
+# Usage:
+#   bash scripts/apply-migrations.sh              # incremental（0002+ のみ・データ保持）
+#   bash scripts/apply-migrations.sh incremental  # 同上
+#   bash scripts/apply-migrations.sh full        # 0001 含む（§0 RESET・全データ削除）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,7 +50,8 @@ else
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
-  echo "No migrations to apply."
+  echo "No incremental migrations to apply (0002+ なし、または未作成)."
+  echo "初回セットアップなら full モード（apply_0001_reset=true）で 0001 を含めて実行。"
   exit 0
 fi
 

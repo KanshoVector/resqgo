@@ -21,7 +21,7 @@ export const emergencyInputSchema = z.object({
   description: z.string().max(500).optional(),
   lat: finiteLatitude,
   lng: finiteLongitude,
-  contact_info: z.string().optional(),
+  contact_info: z.string().max(200).optional(),
   priority: prioritySchema.default("medium"),
 });
 

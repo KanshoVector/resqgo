@@ -3,8 +3,8 @@ name: Ops - Supabase Bootstrap
 on:
   workflow_dispatch:
     inputs:
-      full_reset:
-        description: "Apply 0001 (§0 RESET — deletes all app data). Leave false for normal updates."
+      apply_0001_reset:
+        description: "false=通常（0002以降のみ・データ保持） / true=初回のみ（0001§0RESET・全データ削除）"
         required: false
         default: "false"
         type: choice
@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply-schema:
+  apply-migrations:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          FULL_RESET: ${{ inputs.full_reset }}
+          APPLY_0001_RESET: ${{ inputs.apply_0001_reset }}
         run: |
           set -euo pipefail
           if [[ -z "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
@@ -37,38 +37,13 @@ jobs:
             echo "ERROR: Repository secret SUPABASE_URL is not set."
             exit 1
           fi
-          REF="${SUPABASE_URL#https://}"
-          REF="${REF%%.supabase.co*}"
+          export NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL"
           MODE="incremental"
-          if [[ "$FULL_RESET" == "true" ]]; then
+          if [[ "$APPLY_0001_RESET" == "true" ]]; then
             MODE="full"
-            echo "WARNING: full_reset=true — 0001 §0 RESET will delete app data."
+            echo "::warning::apply_0001_reset=true — 0001 §0 RESET will delete all app data."
           fi
-          mapfile -t FILES < <(find supabase/migrations -name '*.sql' | sort)
-          if [[ "$MODE" == "incremental" ]]; then
-            FILTERED=()
-            for f in "${FILES[@]}"; do
-              base=$(basename "$f")
-              num="${base%%_*}"
-              [[ "$num" != "0001" ]] && FILTERED+=("$f")
-            done
-            FILES=("${FILTERED[@]}")
-            echo "Applying incremental migrations (${#FILES[@]} file(s))"
-          else
-            echo "Applying all migrations (${#FILES[@]} file(s))"
-          fi
-          for f in "${FILES[@]}"; do
-            echo "Applying $(basename "$f") ..."
-            SQL_JSON=$(jq -Rs . "$f")
-            HTTP=$(curl -s -o /tmp/apply_out.json -w "%{http_code}" \
-              -X POST "https://api.supabase.com/v1/projects/${REF}/database/query" \
-              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"query\": ${SQL_JSON}}")
-            echo "Management API HTTP ${HTTP}"
-            cat /tmp/apply_out.json
-            [[ "$HTTP" == "200" || "$HTTP" == "201" ]] || exit 1
-          done
+          bash scripts/apply-migrations.sh "$MODE"
 
       - name: Smoke test (anon key)
         env:

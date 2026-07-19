@@ -36,17 +36,20 @@ description: >-
 
 ## 定番オペレーション
 
-### 1. スキーマ適用（データリセットあり）
+### 1. スキーマ適用
 
-```
-Actions → Ops - Supabase Bootstrap → Run workflow（full_reset=false が通常）
-```
+GitHub Actions → **Ops - Supabase Bootstrap** → Run workflow
 
-またはローカル:
+| UI の `apply_0001_reset` | 意味 |
+|--------------------------|------|
+| **false**（デフォルト） | `0002+` のみ。**通常はこれ**（データ保持） |
+| **true** | `0001` §0 RESET 含む。**新規 Supabase 初回のみ**（全データ削除） |
+
+ローカル:
 
 ```bash
-bash scripts/apply-migrations.sh          # 0002+ のみ（データ保持）
-bash scripts/apply-migrations.sh full     # 0001 含む（§0 RESET で全データ削除）
+bash scripts/apply-migrations.sh          # incremental（0002+）
+bash scripts/apply-migrations.sh full     # 0001 含む（§0 RESET）
 ```
 
 ### 2. 健全性確認
@@ -75,7 +78,7 @@ Actions → Ops - Supabase Keep Alive → Run workflow
 
 ## 変更時チェックリスト
 
-- [ ] `supabase/migrations/` 更新（0002+ は増分、0001 は初回/full_reset のみ）
+- [ ] `supabase/migrations/` 更新（0002+ は incremental、0001 は apply_0001_reset=true のみ）
 - [ ] Bootstrap workflow 実行
 - [ ] `verify-supabase.sh` 通過
 - [ ] README / ADR 更新

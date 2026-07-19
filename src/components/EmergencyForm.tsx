@@ -561,6 +561,7 @@ function EmergencyFormBody({
                 id="contact"
                 value={contactInfo}
                 onChange={(e) => setContactInfo(e.target.value)}
+                maxLength={200}
                 placeholder="電話番号・LINE ID など（ログイン支援者にのみ表示）"
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
               />
@@ -588,6 +589,14 @@ function EmergencyFormBody({
         </section>
       ) : (
         <section className="space-y-4">
+          {!pinPosition && (
+            <div
+              role="alert"
+              className="rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950 sm:text-sm"
+            >
+              位置未設定 — 距離は表示されません。🚨 タブで現在地取得またはピン微調整を先に行ってください。
+            </div>
+          )}
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900 sm:text-sm">
             <Search className="mr-1 inline h-4 w-4" />
             距離は「🚨 救助要請を送信する」で設定した位置を基準に表示します。位置が未設定の場合は先にそちらでピンを置いてください。

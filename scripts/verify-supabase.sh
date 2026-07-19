@@ -30,12 +30,16 @@ BODY=$(curl -sf -X POST "$URL/rpc/keep_alive_ping" \
 echo "$BODY" | grep -q '"status".*"ok"' || fail "keep_alive_ping response: $BODY"
 pass "keep_alive_ping"
 
-echo "=== anon search blocked ==="
-HTTP=$(curl -s -o /tmp/rpc_out.json -w "%{http_code}" -X POST "$URL/rpc/search_nearby_emergencies" \
+echo "=== RPC deployed (search_nearby_emergencies exists) ==="
+HTTP=$(curl -s -o /tmp/rpc_probe.json -w "%{http_code}" -X POST "$URL/rpc/search_nearby_emergencies" \
   -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   -d '{"lat":35.6895,"lng":139.6917,"radius_meters":5000}')
-if [[ "$HTTP" == "200" ]] && [[ "$(cat /tmp/rpc_out.json)" != "[]" && "$(cat /tmp/rpc_out.json)" != "null" ]]; then
+[[ "$HTTP" == "404" ]] && fail "search_nearby_emergencies not found — Bootstrap を実行（0002 未適用の可能性）"
+pass "search_nearby_emergencies reachable (HTTP $HTTP)"
+
+echo "=== anon search blocked ==="
+if [[ "$HTTP" == "200" ]] && [[ "$(cat /tmp/rpc_probe.json)" != "[]" && "$(cat /tmp/rpc_probe.json)" != "null" ]]; then
   fail "anon search should not return data (HTTP $HTTP)"
 fi
 pass "anon search blocked or empty (HTTP $HTTP)"
@@ -54,8 +58,11 @@ HTTP=$(curl -s -o /tmp/sos_out.json -w "%{http_code}" -X POST "$URL/rpc/create_s
   -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   -d '{"p_title":"スモークテストSOS","p_priority":"low","p_lng":139.6917,"p_lat":35.6895}')
+[[ "$HTTP" == "404" ]] && fail "create_sos_emergency not found — Bootstrap（0001 未適用）を実行"
 [[ "$HTTP" != "200" ]] && fail "create_sos_emergency failed (HTTP $HTTP): $(cat /tmp/sos_out.json)"
-pass "create_sos_emergency (HTTP $HTTP)"
+BODY=$(cat /tmp/sos_out.json)
+[[ "$BODY" == "null" || -z "$BODY" ]] && fail "create_sos_emergency returned empty id"
+pass "create_sos_emergency (HTTP $HTTP, id=$BODY)"
 
 echo ""
 echo "All smoke checks passed."

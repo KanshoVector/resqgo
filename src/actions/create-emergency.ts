@@ -38,6 +38,14 @@ export async function createEmergency(
 
     if (error) {
       console.error("[createEmergency] RPC failed:", error);
+      if (error.code === "PGRST202") {
+        return {
+          ok: false,
+          error: "INTERNAL",
+          message:
+            "サーバー設定が未完了です。GitHub Actions の Ops - Supabase Bootstrap を実行してください。",
+        };
+      }
       if (error.code === "22023") {
         return { ok: false, error: "VALIDATION", message: "入力内容が不正です。" };
       }
