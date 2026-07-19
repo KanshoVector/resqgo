@@ -141,6 +141,7 @@ function EmergencyFormBody({
   const initialLocationRequested = useRef(false);
   const filtersLoadedRef = useRef(false);
   const mapSectionRef = useRef<HTMLElement>(null);
+  const lastUrlParamsRef = useRef<string | null>(null);
 
   const handleGetLocation = useCallback(() => {
     if (lat !== null && lng !== null) onRecenter();
@@ -150,6 +151,14 @@ function EmergencyFormBody({
   const focusReportTab = useCallback(() => {
     setActiveTab("report");
   }, []);
+
+  const selectReportTab = useCallback(() => {
+    focusReportTab();
+    if (searchParams.get("tab") || searchParams.get("destLat")) {
+      lastUrlParamsRef.current = "";
+      router.replace("/", { scroll: false });
+    }
+  }, [focusReportTab, router, searchParams]);
 
   const toggleAdjustMode = useCallback(() => {
     focusReportTab();
@@ -204,12 +213,16 @@ function EmergencyFormBody({
   }, [filters]);
 
   useEffect(() => {
+    const paramKey = searchParams.toString();
+    if (lastUrlParamsRef.current !== null && paramKey === lastUrlParamsRef.current) {
+      return;
+    }
+    lastUrlParamsRef.current = paramKey;
+
     const tab = searchParams.get("tab");
     const destLat = searchParams.get("destLat");
     const destLng = searchParams.get("destLng");
     const destLabel = searchParams.get("destLabel");
-
-    if (tab === "search") setActiveTab("search");
 
     if (destLat && destLng) {
       const dLat = Number(destLat);
@@ -221,22 +234,27 @@ function EmergencyFormBody({
           lng: dLng,
           label: destLabel ?? "目的地",
         });
-        handleGetLocation();
+        requestCurrentLocation();
         showStatus("経路を表示しています。現在地の取得を許可してください。", "info");
         mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
+      return;
     }
-  }, [searchParams, handleGetLocation, showStatus]);
+
+    if (tab === "search") {
+      setActiveTab("search");
+    }
+  }, [searchParams, requestCurrentLocation, showStatus]);
 
   useEffect(() => {
-    if (!adjustMode) return;
-    focusReportTab();
+    if (adjustMode) focusReportTab();
   }, [adjustMode, focusReportTab]);
 
   const handleClearRoute = useCallback(() => {
     setRouteDestination(null);
-    if (searchParams.get("destLat")) {
-      router.replace("/?tab=search", { scroll: false });
+    if (searchParams.get("destLat") || searchParams.get("tab")) {
+      lastUrlParamsRef.current = "";
+      router.replace("/", { scroll: false });
     }
   }, [router, searchParams]);
 
@@ -257,8 +275,9 @@ function EmergencyFormBody({
   useEffect(() => {
     if (!draftReady || initialLocationRequested.current) return;
     initialLocationRequested.current = true;
+    focusReportTab();
     requestCurrentLocation();
-  }, [draftReady, requestCurrentLocation]);
+  }, [draftReady, focusReportTab, requestCurrentLocation]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -399,7 +418,7 @@ function EmergencyFormBody({
           type="button"
           role="tab"
           aria-selected={activeTab === "report"}
-          onClick={() => setActiveTab("report")}
+          onClick={selectReportTab}
           className={`rounded-lg px-2 py-3 text-xs font-bold leading-snug transition sm:text-sm ${
             activeTab === "report"
               ? "bg-red-600 text-white shadow"
